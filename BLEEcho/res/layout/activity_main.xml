@@ -1,0 +1,73 @@
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:paddingBottom="@dimen/activity_vertical_margin"
+    android:paddingLeft="@dimen/activity_horizontal_margin"
+    android:paddingRight="@dimen/activity_horizontal_margin"
+    android:paddingTop="@dimen/activity_vertical_margin"
+    tools:context="com.example.bleecho.MainActivity" >
+
+    <TextView
+        android:id="@+id/textConnectionStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentRight="true"
+        android:layout_alignParentTop="true"
+        android:gravity="center"
+        android:text="Disconnected"
+        android:textAppearance="?android:attr/textAppearanceLarge" />
+
+    <Button
+        android:id="@+id/btnRefreshConnection"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignLeft="@+id/textConnectionStatus"
+        android:layout_alignParentRight="true"
+        android:layout_below="@+id/textConnectionStatus"
+        android:text="Refresh" />
+
+    <EditText
+        android:id="@+id/editToSend"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignLeft="@+id/btnRefreshConnection"
+        android:layout_alignParentRight="true"
+        android:layout_below="@+id/btnRefreshConnection"
+        android:hint="String to send"
+        android:ems="10" >
+
+        <requestFocus />
+    </EditText>
+
+    <Button
+        android:id="@+id/btnSend"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignLeft="@+id/editToSend"
+        android:layout_alignRight="@+id/editToSend"
+        android:layout_below="@+id/editToSend"
+        android:text="Send" />
+
+    <TextView
+        android:id="@+id/textEcho"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignLeft="@+id/btnSend"
+        android:layout_alignRight="@+id/btnSend"
+        android:layout_below="@+id/btnSend"
+        android:text="Echo:"
+        android:textAppearance="?android:attr/textAppearanceLarge" />
+
+    <TextView
+        android:id="@+id/textResponse"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignLeft="@+id/textEcho"
+        android:layout_alignRight="@+id/textEcho"
+        android:layout_below="@+id/textEcho"
+        android:text="Response"
+        android:textAppearance="?android:attr/textAppearanceLarge" />
+
+</RelativeLayout>
