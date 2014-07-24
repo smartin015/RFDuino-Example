@@ -1,3 +1,9 @@
+/* RFDuino BLE Echo App
+ * Paul Lutz
+ * Scott Martin
+ * 7/2014
+ */
+
 package com.example.bleecho;
 
 import java.io.UnsupportedEncodingException;
@@ -26,19 +32,19 @@ import android.widget.EditText;
 import android.widget.TextView;
 
 public class MainActivity extends Activity {
-	 private final static String TAG = MainActivity.class.getSimpleName();
-	 private final static String ERROR_TAG = "ERROR";
+	private final static String TAG = MainActivity.class.getSimpleName();
+	private final static String ERROR_TAG = "ERROR";
 
-    private BluetoothAdapter mBluetoothAdapter; 
-    private BluetoothManager mBluetoothManager;
-    private BluetoothGatt mBluetoothGatt;
+    private BluetoothAdapter bluetoothAdapter; 
+    private BluetoothManager bluetoothManager;
+    private BluetoothGatt bluetoothGatt;
     private BluetoothGattCharacteristic sendCharacteristic = null;
     private BluetoothGattCharacteristic receiveCharacteristic = null;
     
+    private String bluetoothDeviceAddress = "";
+    private static final String DEVICE_NAME = "RFduino";
     
-    private String mBluetoothDeviceAddress;
-    
-    private String mConnectionState = STATE_DISCONNECTED;
+    private String connectionState = STATE_DISCONNECTED;
     private static final String STATE_DISCONNECTED = "Disconnected";
     private static final String STATE_CONNECTING = "Connecting...";
     private static final String STATE_CONNECTED = "Connected";
@@ -46,17 +52,18 @@ public class MainActivity extends Activity {
     private static final String UPDATE_STATUS_INTENT = "ble.echo.update.STATUS";
     private static final String UPDATE_RESPONSE_INTENT = "ble.echo.update.RESPONSE";
     
-    private static final String RECEIVE_UUID = "2222";
-    private static final String SEND_UUID = "2221";
+    private static final String RECEIVE_CHARACTERISTIC_UUID = "2222";
+    private static final String SEND_CHARACTERISTIC_UUID = "2221";
     
-    private boolean mScanning;
-    private Handler mHandler;
-
+    private boolean isScanning;
+    private Handler scanTimeoutHandler;
+    
     private static final int REQUEST_ENABLE_BT = 1;
+    
     // Stops scanning after 10 seconds.
     private static final long SCAN_PERIOD = 10000;
 
-    private String stringToDisplay = "Response";
+    private String stringToDisplay = "";
     
     Button btnRefreshConnection;
     Button btnSend;
@@ -67,24 +74,29 @@ public class MainActivity extends Activity {
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(UPDATE_STATUS_INTENT);
-        registerReceiver(statusReceiver, filter);
-        
-
-        IntentFilter filter2 = new IntentFilter();
-        filter2.addAction(UPDATE_RESPONSE_INTENT);
-        registerReceiver(responseReceiver, filter2);
-        
 		setContentView(R.layout.activity_main);
+
+        Log.w(TAG, "Setting up...");
+        
+        scanTimeoutHandler = new Handler();
+
+        // This filter will update the status text view
+        IntentFilter statusFilter = new IntentFilter();
+        statusFilter.addAction(UPDATE_STATUS_INTENT);
+        registerReceiver(statusReceiver, statusFilter);
+
+        // This filter will update the response text view
+        IntentFilter responseFilter = new IntentFilter();
+        responseFilter.addAction(UPDATE_RESPONSE_INTENT);
+        registerReceiver(responseReceiver, responseFilter);
+        
+        // Initialize UI elements
 		btnRefreshConnection = (Button) findViewById(R.id.btnRefreshConnection);
 	    btnSend = (Button) findViewById(R.id.btnSend);
 	    editToSend = (EditText) findViewById(R.id.editToSend);
 	    textResponse = (TextView) findViewById(R.id.textResponse);
 	    textConnectionStatus = (TextView) findViewById(R.id.textConnectionStatus);
 	    
-		Log.w(TAG,"Good start");
 		// Use this check to determine whether BLE is supported on the device.  Then you can
         // selectively disable BLE-related features.
         if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
@@ -92,122 +104,92 @@ public class MainActivity extends Activity {
             finish();
         }
 
-        // Initializes a Bluetooth adapter.  For API level 18 and above, get a reference to
-        // BluetoothAdapter through BluetoothManager.
-
-		Log.w(TAG,"Making bluetoothmanager");
-        mBluetoothManager =
+		Log.w(TAG,"Initializing Bluetooth Manager");
+        bluetoothManager =
             (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
-		Log.w(TAG,"making bluetoothadapter");
-        mBluetoothAdapter = mBluetoothManager.getAdapter();
-
-        // Checks if Bluetooth is supported on the device.
-        if (mBluetoothAdapter == null) {
+        
+		Log.w(TAG,"Initializing Bluetooth Adapter");
+        bluetoothAdapter = bluetoothManager.getAdapter();
+        if (bluetoothAdapter == null) {
     		Log.w(ERROR_TAG,"Bluetooth not supported");
             finish();
         }
-        Log.w(TAG, "Instantiating handler");
-        mHandler = new Handler();
-        
-		
-        //scanLeDevice(true);
         
         btnRefreshConnection.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-            	if(mScanning) {
-            		Log.w(TAG,"Already Scannign, dumbass. And you misspelled scanning.");
-            	}
-            	else if(mConnectionState.equals(STATE_CONNECTED)) {
-            		
-            	}
-            	else {
-            		//Log.w(TAG,mBluetoothGatt.getConnectedDevices() .getDevice().getName());
-                	//mBluetoothGatt.disconnect();
-            		Log.w(TAG,"Starting Scan");
-            		scanLeDevice(true);
-            	}
+            	setScanning(true);
             }
         });
         
         btnSend.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-            	if(sendCharacteristic == null)
-            	{
-            		
-            		
+            	if(sendCharacteristic == null || receiveCharacteristic == null) {
+            		Log.w(ERROR_TAG,"Invalid characteristic");
+            		return;
             	}
-            	else if(receiveCharacteristic == null)
-            	{
-            		
-            	}
-            	else if(mConnectionState.equals(STATE_DISCONNECTED))
-            	{
+            	
+            	if(connectionState.equals(STATE_DISCONNECTED)) {
             		Log.w(ERROR_TAG,"You're not connected!");
+            		return;
             	}
-            	else
-            	{
-            		writeDataToCharacteristic(receiveCharacteristic,stringToBytesASCII(editToSend.getText().toString()));
-            	}
+            
+            	writeDataToCharacteristic(receiveCharacteristic,editToSend.getText().toString().getBytes());
             	readDataFromCharacteristic(sendCharacteristic);
             }
         });
 	}
 	
-	 private void scanLeDevice(final boolean enable) {
+	private void setScanning(final boolean enable) {
+		if(isScanning) {
+    		Log.w(TAG,"Already Scanning");
+    		return;
+    	} 
+		if(connectionState.equals(STATE_CONNECTED)) {
+    		Log.w(TAG,"Already connected");
+    		return;
+    	}
+		
         if (enable) {
             // Stops scanning after a pre-defined scan period.
-            mHandler.postDelayed(new Runnable() {
+        	scanTimeoutHandler.postDelayed(new Runnable() {
                 @Override
                 public void run() {
-                    mScanning = false;
-                    mBluetoothAdapter.stopLeScan(mLeScanCallback);
-                    invalidateOptionsMenu();
+                    isScanning = false;
+                    bluetoothAdapter.stopLeScan(scanCallback);
                 }
             }, SCAN_PERIOD);
 
-            mScanning = true;
-            mBluetoothAdapter.startLeScan(mLeScanCallback);
+            isScanning = true;
+            bluetoothAdapter.startLeScan(scanCallback);
         } else {
-            mScanning = false;
-            mBluetoothAdapter.stopLeScan(mLeScanCallback);
+            isScanning = false;
+            bluetoothAdapter.stopLeScan(scanCallback);
         }
-        invalidateOptionsMenu();
     }
 	
-	 // Device scan callback.
-    private BluetoothAdapter.LeScanCallback mLeScanCallback =
-            new BluetoothAdapter.LeScanCallback() {
-
+    private BluetoothAdapter.LeScanCallback scanCallback = new BluetoothAdapter.LeScanCallback() {
         @Override
         public void onLeScan(final BluetoothDevice device, int rssi, byte[] scanRecord) {
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                	Log.w(TAG, "Found device: " + device.getName());
-                	if(device.getName().equals("RFduino"))
-                	{
-	                	Log.w(TAG,device.getAddress());
-	                	connect(device.getAddress());
-                	}
-                	//new device! check it
-                    //mLeDeviceListAdapter.addDevice(device);
-                    //mLeDeviceListAdapter.notifyDataSetChanged();
-                }
-            });
+        	Log.w(TAG, "Found device: " + device.getName());
+        	if(device.getName().equals(DEVICE_NAME))
+        	{ 
+            	Log.w(TAG,device.getAddress());
+            	connect(device);
+        	}
         }
     };
-    public boolean connect(final String address) {
-        if (mBluetoothAdapter == null || address == null) {
+    
+    public boolean connect(BluetoothDevice device) {
+        if (bluetoothAdapter == null || device == null) {
             Log.w(ERROR_TAG, "BluetoothAdapter not initialized or unspecified address.");
             return false;
         }
 
         // Previously connected device.  Try to reconnect.
-        if (mBluetoothDeviceAddress != null && address.equals(mBluetoothDeviceAddress)
-                && mBluetoothGatt != null) {
-            Log.d(TAG, "Trying to use an existing mBluetoothGatt for connection.");
-            if (mBluetoothGatt.connect()) {
-                mConnectionState = STATE_CONNECTING;
+        if (device.getAddress().equals(bluetoothDeviceAddress) && bluetoothGatt != null) {
+            Log.d(TAG, "Using existing bluetoothGatt for connection.");
+            if (bluetoothGatt.connect()) {
+                connectionState = STATE_CONNECTING;
                 updateStatusIntent();
                 return true;
             } else {
@@ -215,17 +197,11 @@ public class MainActivity extends Activity {
             }
         }
 
-        final BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(address);
-        if (device == null) {
-            Log.w(ERROR_TAG, "Device not found.  Unable to connect.");
-            return false;
-        }
-        // We want to directly connect to the device, so we are setting the autoConnect
-        // parameter to false.
-        mBluetoothGatt = device.connectGatt(this, false, mGattCallback);
-        Log.d(TAG, "Trying to create a new connection.");
-        mBluetoothDeviceAddress = address;
-        mConnectionState = STATE_CONNECTING;
+        Log.d(TAG, "Creating new connection");
+        bluetoothGatt = device.connectGatt(this, false, mGattCallback);
+        bluetoothDeviceAddress = device.getAddress();
+        
+        connectionState = STATE_CONNECTING;
         updateStatusIntent();
         return true;
     }
@@ -234,8 +210,8 @@ public class MainActivity extends Activity {
         @Override
         public void onReceive(Context context, Intent intent) {
         	if (intent.getAction().equals(UPDATE_STATUS_INTENT)) {
-                Log.w(TAG,"GOT THE STATUS INTENT");
-            	textConnectionStatus.setText(mConnectionState);
+                Log.w(TAG,"Status Changed: "+connectionState);
+            	textConnectionStatus.setText(connectionState);
             }
         }
     };
@@ -244,7 +220,7 @@ public class MainActivity extends Activity {
         @Override
         public void onReceive(Context context, Intent intent) {
         	if (intent.getAction().equals(UPDATE_RESPONSE_INTENT)) {
-                Log.w(TAG,"GOT THE RESPONSE INTENT");
+                Log.w(TAG,"Response Received: "+stringToDisplay);
             	textResponse.setText(stringToDisplay);
             }
         }
@@ -253,139 +229,104 @@ public class MainActivity extends Activity {
     private final BluetoothGattCallback mGattCallback = new BluetoothGattCallback() {
         @Override
         public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
-        	Context context = getApplicationContext();
             if (newState == BluetoothProfile.STATE_CONNECTED) {
-                mConnectionState = STATE_CONNECTED;
-                //Log.w(TAG,"");
-                updateStatusIntent();
-                //gatt.getConnectedDevices();
-
-                mBluetoothGatt.discoverServices();
-
-                
+                connectionState = STATE_CONNECTED;
+                bluetoothGatt.discoverServices();
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                mConnectionState = STATE_DISCONNECTED;
-                updateStatusIntent();
+                connectionState = STATE_DISCONNECTED;
             }
+            updateStatusIntent();
         }
 
         @Override
         public void onServicesDiscovered(BluetoothGatt gatt, int status) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
-            	//txtStatus.setText("Connected");
-            	Log.w(TAG,"ALMOST THERE");
-                List<BluetoothGattService> bgsList = mBluetoothGatt.getServices();//mBluetoothGatt.getServices();
-                Log.w(TAG,"List size: "+ bgsList.size());
-                for(int i = 0; i < bgsList.size();i++) {
-                	Log.w(TAG,"Service UUID: "+bgsList.get(i).getUuid().toString());
-                    List<BluetoothGattCharacteristic> bgcList = bgsList.get(i).getCharacteristics();
-                    for(int j = 0; j < bgcList.size();j++) {
-                    	Log.w(TAG,"Characteristic UUID: "+bgcList.get(j).getUuid().toString());
-                    	if(bgcList.get(j).getUuid().toString().contains(RECEIVE_UUID)) {
+            	Log.w(TAG,"Searching for send & receive characteristics");
+            	
+                List<BluetoothGattService> bgsList = bluetoothGatt.getServices();
+                
+                for(BluetoothGattService bgs : bgsList) {
+                	Log.w(TAG,"Service UUID: "+bgs.getUuid().toString());
+                    List<BluetoothGattCharacteristic> bgcList = bgs.getCharacteristics();
+                    
+                    for(BluetoothGattCharacteristic bgc : bgcList) {
+                    	String uuid = bgc.getUuid().toString();
+                    	Log.w(TAG,"Characteristic UUID: "+uuid);
+                    	
+                    	if(uuid.contains(RECEIVE_CHARACTERISTIC_UUID)) {
                     		Log.w(TAG,"RFduino receive characteristic found");
-                    		receiveCharacteristic = bgcList.get(j);
-                    	} else if(bgcList.get(j).getUuid().toString().contains(SEND_UUID)) {
+                    		receiveCharacteristic = bgc;
+                    	} else if(uuid.contains(SEND_CHARACTERISTIC_UUID)) {
                     		Log.w(TAG,"RFduino send characteristic found");
-                    		sendCharacteristic = bgcList.get(j);
+                    		sendCharacteristic = bgc;
                     	}
                     }
                 }
+                
+                if (receiveCharacteristic == null) {
+                	Log.w(ERROR_TAG, "Receive characteristic not found");
+                }
+                if (sendCharacteristic == null) {
+                	Log.w(ERROR_TAG, "Send characteristic not found");
+                }
             } else {
-                Log.w(ERROR_TAG, "onServicesDiscovered received: " + status);
+                Log.w(ERROR_TAG, "onServicesDiscovered status " + status);
             }
         }
 
         @Override
-        public void onCharacteristicRead(BluetoothGatt gatt,
-                                         BluetoothGattCharacteristic characteristic,
-                                         int status) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-            	stringToDisplay = "";
-            	String tempChar = "a";
-            	Log.w(TAG,"read some shit");
-            	//characteristic.getValue()
-            	byte[] tempByteArr = characteristic.getValue();
-            	for(int i = 0; i<tempByteArr.length;i++)
-            	{
-                	try {
-                		tempChar = new String(new byte[]{ tempByteArr[i] }, "US-ASCII");
-						Log.w(TAG,"Char read: " + tempChar);
-						stringToDisplay += tempChar;
-					} catch (UnsupportedEncodingException e) {
-						Log.w(ERROR_TAG, "Problem translating byte to string");
-						// TODO Auto-generated catch block 
-						e.printStackTrace();
-					}
-            	}
-            	updateResponseIntent();
-            } 
-        }
-
-        @Override
-        public void onCharacteristicChanged(BluetoothGatt gatt,
-                                            BluetoothGattCharacteristic characteristic) {
-
+        public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+            	return;
+            }
+            
+            Log.w(TAG,"Parsing read characteristic value");
+        	try {
+        		stringToDisplay = new String(characteristic.getValue(), "US-ASCII");
+        	} catch (UnsupportedEncodingException e) {
+				Log.w(ERROR_TAG, "Unsupported Encoding");
+				stringToDisplay = "";
+			}
+        	updateResponseIntent();
         }
     };
     
     public void writeDataToCharacteristic(final BluetoothGattCharacteristic ch, final byte[] dataToWrite) {
-        if (mBluetoothAdapter == null || mBluetoothGatt == null || ch == null) return;
-        Log.w(TAG,"Writing!");
+        if (bluetoothAdapter == null || bluetoothGatt == null || ch == null) return;
+        
+        Log.w(TAG,"Writing");
         ch.setValue(dataToWrite);
         
-        if(mBluetoothGatt.writeCharacteristic(ch))
-        {
-        	Log.w(TAG,"write successful");
-        }
-        else
-        {
-        	Log.w(ERROR_TAG,"write NOT successful");
+        if(bluetoothGatt.writeCharacteristic(ch)) {
+        	Log.w(TAG,"write success");
+        } else {
+        	Log.w(ERROR_TAG,"write failed");
         }
         
     }
     
     public void readDataFromCharacteristic(final BluetoothGattCharacteristic ch) {
-    	if (mBluetoothAdapter == null || mBluetoothGatt == null || ch == null) return;
-    	if(mBluetoothGatt.readCharacteristic(ch))
-        {
-        	Log.w(TAG,"read successful");
-        }
-        else
-        {
-        	Log.w(ERROR_TAG,"read NOT successful");
+    	if (bluetoothAdapter == null || bluetoothGatt == null || ch == null) return;
+    	if(bluetoothGatt.readCharacteristic(ch)) {
+        	Log.w(TAG,"read success");
+        } else {
+        	Log.w(ERROR_TAG,"read failed");
         }
     }
     
-    public void updateStatusIntent()
-    {
+    public void updateStatusIntent() {
     	Log.w(TAG,"broadcasting status update intent");
     	Context context = getApplicationContext();
-
-        context = getApplicationContext();
     	Intent i = new Intent();
         i.setAction(UPDATE_STATUS_INTENT);
         context.sendBroadcast(i);
     }
     
-    public void updateResponseIntent()
-    {
+    public void updateResponseIntent() {
     	Log.w(TAG,"broadcasting response update intent");
     	Context context = getApplicationContext();
-
-        context = getApplicationContext();
     	Intent i = new Intent();
         i.setAction(UPDATE_RESPONSE_INTENT);
         context.sendBroadcast(i);
     }
-    
-    
-    
-    public static byte[] stringToBytesASCII(String str) {
-    	 char[] buffer = str.toCharArray();
-    	 byte[] b = new byte[buffer.length];
-    	 for (int i = 0; i < b.length; i++) {
-    	  b[i] = (byte) buffer[i];
-    	 }
-    	 return b;
-    	}
 }
