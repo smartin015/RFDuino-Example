@@ -9,19 +9,6 @@
     tools:context="com.example.bletest.MainActivity" >
 
     <EditText
-        android:id="@+id/editRed"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignParentLeft="true"
-        android:layout_alignParentRight="true"
-        android:layout_alignParentTop="true"
-		android:hint="Red Value"
-        android:ems="10" >
-
-        <requestFocus />
-    </EditText>
-
-    <EditText
         android:id="@+id/editGreen"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -49,5 +36,43 @@
         android:layout_alignRight="@+id/editBlue"
         android:layout_below="@+id/editBlue"
         android:text="Send" />
+
+    <EditText
+        android:id="@+id/editRed"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignLeft="@+id/btnDisconnect"
+        android:layout_alignParentRight="true"
+        android:layout_below="@+id/btnDisconnect"
+        android:ems="10"
+        android:hint="Red Value" />
+
+    <Button
+        android:id="@+id/btnDisconnect"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignLeft="@+id/btnConnect"
+        android:layout_alignRight="@+id/btnConnect"
+        android:layout_below="@+id/btnConnect"
+        android:text="Disconnect" />
+
+    <TextView
+        android:id="@+id/textConnectionStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentTop="true"
+        android:layout_alignRight="@+id/editRed"
+        android:text="..."
+        android:textAppearance="?android:attr/textAppearanceLarge" />
+
+    <Button
+        android:id="@+id/btnConnect"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentRight="true"
+        android:layout_below="@+id/textConnectionStatus"
+        android:text="Connect" />
 
 </RelativeLayout>

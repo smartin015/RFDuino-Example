@@ -11,11 +11,12 @@ import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -26,29 +27,42 @@ public class MainActivity extends Activity {
 
     private BluetoothManager mBluetoothManager;
     private BluetoothAdapter mBluetoothAdapter;
-    private String mBluetoothDeviceAddress;
     private BluetoothGatt mBluetoothGatt;
-    private int mConnectionState = STATE_DISCONNECTED;
+    private String mBluetoothDeviceAddress;
+    private String mConnectionState = STATE_DISCONNECTED;
 
-    private static final int STATE_DISCONNECTED = 0;
-    private static final int STATE_CONNECTING = 1;
-    private static final int STATE_CONNECTED = 2;
+    private static final String STATE_DISCONNECTED = "Disconnected";
+    private static final String STATE_CONNECTING = "Connecting...";
+    private static final String STATE_CONNECTED = "Connected";
+    private static final String UPDATE_GUI_INTENT = "ble.test.update.GUI";
+    
+    Context context;
 
     private EditText editRed;
     private EditText editGreen;
     private EditText editBlue;
+    private TextView textConnectionStatus;
     private Button btnSend;
+    private Button btnConnect;
+    private Button btnDisconnect;
     private String MAC = "C6:DF:7D:96:83:28";
     
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
+
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(UPDATE_GUI_INTENT);
+        registerReceiver(receiver, filter);
 		
 		editRed = (EditText) findViewById(R.id.editRed);
 		editGreen = (EditText) findViewById(R.id.editGreen);
 	    editBlue = (EditText) findViewById(R.id.editBlue);
+	    textConnectionStatus = (TextView) findViewById(R.id.textConnectionStatus);
 	    btnSend = (Button) findViewById(R.id.btnSend);
+	    btnConnect = (Button) findViewById(R.id.btnConnect);
+	    btnDisconnect = (Button) findViewById(R.id.btnDisconnect);
 		
 		mBluetoothManager =
                 (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
@@ -56,7 +70,26 @@ public class MainActivity extends Activity {
 		
 		//BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(MAC);
 		//mBluetoothGatt = device.connectGatt(this, false, mGattCallback);
-		connect(MAC);
+        btnConnect.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+
+                
+            	connect(MAC);
+            	
+                //textConnectionStatus.setText(mConnectionState);
+            }
+            
+        });
+        btnDisconnect.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+
+                
+            	mBluetoothGatt.disconnect();
+            	
+                //textConnectionStatus.setText(mConnectionState);
+            }
+            
+        });
 		btnSend.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
             	Log.w(TAG,"ALMOST THERE");
@@ -85,26 +118,8 @@ public class MainActivity extends Activity {
                 }
             }
         });
-	}
+	} 
 
-	@Override
-	public boolean onCreateOptionsMenu(Menu menu) {
-		// Inflate the menu; this adds items to the action bar if it is present.
-		getMenuInflater().inflate(R.menu.main, menu);
-		return true;
-	}
-
-	@Override
-	public boolean onOptionsItemSelected(MenuItem item) {
-		// Handle action bar item clicks here. The action bar will
-		// automatically handle clicks on the Home/Up button, so long
-		// as you specify a parent activity in AndroidManifest.xml.
-		int id = item.getItemId();
-		if (id == R.id.action_settings) {
-			return true;
-		}
-		return super.onOptionsItemSelected(item);
-	}
 	
 	private final BluetoothGattCallback mGattCallback = new BluetoothGattCallback() {
         @Override
@@ -113,12 +128,20 @@ public class MainActivity extends Activity {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 mConnectionState = STATE_CONNECTED;
                 //Log.w(TAG,"");
-                mBluetoothGatt.discoverServices();
-                
+                context = getApplicationContext();
+            	Intent i = new Intent();
+                i.setAction(UPDATE_GUI_INTENT);
+                context.sendBroadcast(i);
                 //gatt.getConnectedDevices();
+
+                mBluetoothGatt.discoverServices();
 
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 mConnectionState = STATE_DISCONNECTED;
+                context = getApplicationContext();
+            	Intent i = new Intent();
+                i.setAction(UPDATE_GUI_INTENT);
+                context.sendBroadcast(i);
             }
         }
 
@@ -126,6 +149,7 @@ public class MainActivity extends Activity {
         public void onServicesDiscovered(BluetoothGatt gatt, int status) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
             	//txtStatus.setText("Connected");
+            	
             } else {
                 Log.w(TAG, "onServicesDiscovered received: " + status);
 
@@ -138,7 +162,8 @@ public class MainActivity extends Activity {
                                          BluetoothGattCharacteristic characteristic,
                                          int status) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
-
+            	//characteristic.getValue()
+            	Log.w(TAG,"");
             } 
         }
 
@@ -197,4 +222,14 @@ public class MainActivity extends Activity {
         mConnectionState = STATE_CONNECTING;
         return true;
     }
+    private BroadcastReceiver receiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+        	if (intent.getAction().equals(UPDATE_GUI_INTENT)) {
+                Log.w(TAG,"GOT THE INTENT");
+            	textConnectionStatus.setText(mConnectionState);
+            }
+        }
+    };
+    
 }
